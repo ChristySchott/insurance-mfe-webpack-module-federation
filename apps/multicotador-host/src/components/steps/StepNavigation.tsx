@@ -7,7 +7,7 @@ interface NavigationProps {
   isLastStep: boolean
 }
 
-export function Navigation({
+export function StepNavigation({
   currentStep,
   totalSteps,
   onPrevious,

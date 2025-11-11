@@ -1,12 +1,12 @@
 import { Suspense, ReactNode } from 'react'
+import { StepNavigation } from '@/components/steps/StepNavigation'
+import { LoadingSpinner } from '@/components/LoadingSpinner'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import { StepProgress } from './StepProgress'
-import { Navigation } from './Navigation'
-import { LoadingSpinner } from './LoadingSpinner'
-import { Step1 } from './steps/Step1'
-import { Step2 } from './steps/Step2'
-import { Step3 } from './steps/Step3'
-import { Step4 } from './steps/Step4'
-import { ErrorBoundary } from './ErrorBoundary'
+import { Step1 } from './Step1'
+import { Step2 } from './Step2'
+import { Step3 } from './Step3'
+import { Step4 } from './Step4'
 import { useCotacaoStore } from '@/hooks/useCotacaoStore'
 
 const TOTAL_STEPS = 4
@@ -61,7 +61,7 @@ export function StepWizard() {
         </Suspense>
 
         {currentStep < TOTAL_STEPS && (
-          <Navigation
+          <StepNavigation
             currentStep={currentStep}
             totalSteps={TOTAL_STEPS}
             onPrevious={handlePrevious}

@@ -1,4 +1,4 @@
-import { StepWizard } from './components/StepWizard'
+import { StepWizard } from './components/steps/StepWizard'
 
 export default function App() {
   return (
