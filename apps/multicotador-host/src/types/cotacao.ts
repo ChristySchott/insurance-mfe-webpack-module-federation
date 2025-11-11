@@ -1,23 +1,23 @@
-export interface Coverage {
-  name: string
-  value: number
-}
-
 export interface CotacaoState {
   currentStep: number
+  isCurrentStepValid: boolean
   cpf: string
   productType: string | null
-  step2Data: Record<string, unknown>
-  step2IsValid: boolean
-  step3IsValid: boolean
+  productData: Record<string, unknown>
 }
+
+type ProductData = Record<string, unknown>
+
+export type ProductDataUpdater =
+  | ProductData
+  | ((prev: ProductData) => ProductData)
 
 export interface CotacaoActions {
   setCurrentStep: (step: number) => void
   setCpf: (cpf: string) => void
   setProductType: (type: string) => void
-  setStep2Data: (data: Record<string, unknown>) => void
-  setStep2IsValid: (valid: boolean) => void
+  setProductData: (data: ProductDataUpdater) => void
+  setIsCurrentStepValid: (valid: boolean) => void
   reset: (values?: Partial<CotacaoState>) => void
 }
 

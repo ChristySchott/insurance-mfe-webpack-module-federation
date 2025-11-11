@@ -1,7 +1,7 @@
 import { useCotacaoStore } from '@/hooks/useCotacaoStore'
 
 export function Step4() {
-  const { productType, step2Data, reset } = useCotacaoStore()
+  const { productType, productData, reset } = useCotacaoStore()
 
   const handleFinish = () => {
     alert('Cotação finalizada com sucesso!')
@@ -41,7 +41,7 @@ export function Step4() {
             Detalhes da cotação
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {Object.entries(step2Data).map(([key, value]) => (
+            {Object.entries(productData).map(([key, value]) => (
               <div key={key}>
                 <p className="text-sm text-gray-600 capitalize">
                   {key.replace(/([A-Z])/g, ' $1').trim()}

@@ -4,6 +4,7 @@ import { z } from 'zod'
 import { useCotacaoStore } from '@/hooks/useCotacaoStore'
 import { formatCpf } from '@/lib/format'
 import { ProductTypeSelector } from '@/components/ProductTypeSelector'
+import { useEffect } from 'react'
 
 const step1Schema = z.object({
   cpf: z
@@ -21,13 +22,20 @@ const step1Schema = z.object({
 type Step1FormData = z.infer<typeof step1Schema>
 
 export function Step1() {
-  const { productType, setProductType, reset, setCpf, cpf } = useCotacaoStore()
+  const {
+    productType,
+    setProductType,
+    reset,
+    setCpf,
+    cpf,
+    setIsCurrentStepValid,
+  } = useCotacaoStore()
 
   const {
     register,
     setValue,
-    watch,
-    formState: { errors },
+    getValues,
+    formState: { errors, isValid },
   } = useForm<Step1FormData>({
     resolver: zodResolver(step1Schema),
     defaultValues: {
@@ -36,7 +44,11 @@ export function Step1() {
     },
   })
 
-  const selectedProductType = watch('productType')
+  useEffect(() => {
+    setIsCurrentStepValid(isValid)
+  }, [isValid, setIsCurrentStepValid])
+
+  const selectedProductType = getValues('productType')
 
   const handleProductTypeChange = (
     event: React.ChangeEvent<HTMLInputElement>

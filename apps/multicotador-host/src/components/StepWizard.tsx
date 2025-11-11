@@ -22,25 +22,27 @@ const renderStep = (currentStep: number) => {
   return contentBasedOnStep[currentStep] || <Step1 />
 }
 
-export function StepWizard() {
-  const { currentStep, setCurrentStep, cpf, productType, step2IsValid } =
-    useCotacaoStore()
-
-  const canGoNext = () => {
-    const rulesToGoNextBasedOnStep: Record<number, boolean> = {
-      1: cpf.length > 0 && productType !== null,
-      2: step2IsValid,
-      3: true,
-      4: false,
-    }
-
-    return Boolean(rulesToGoNextBasedOnStep[currentStep])
+const canAdvanceToNextStep = (
+  currentStep: number,
+  isCurrentStepValid: boolean
+) => {
+  const rulesToGoNextBasedOnStep: Record<number, boolean> = {
+    1: currentStep === 1 && isCurrentStepValid,
+    2: currentStep === 2 && isCurrentStepValid,
+    3: currentStep === 3 && isCurrentStepValid,
+    4: false,
   }
 
+  return Boolean(rulesToGoNextBasedOnStep[currentStep])
+}
+
+export function StepWizard() {
+  const { currentStep, setCurrentStep, isCurrentStepValid } = useCotacaoStore()
+
+  const canGoNext = canAdvanceToNextStep(currentStep, isCurrentStepValid)
+
   const handleNext = () => {
-    if (canGoNext() && currentStep < TOTAL_STEPS) {
-      setCurrentStep(currentStep + 1)
-    }
+    setCurrentStep(currentStep + 1)
   }
 
   const handlePrevious = () => {
@@ -64,7 +66,7 @@ export function StepWizard() {
             totalSteps={TOTAL_STEPS}
             onPrevious={handlePrevious}
             onNext={handleNext}
-            canGoNext={canGoNext()}
+            canGoNext={canGoNext}
             isLastStep={currentStep === TOTAL_STEPS}
           />
         )}

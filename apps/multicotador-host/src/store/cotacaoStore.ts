@@ -1,21 +1,16 @@
 import { createSlice, configureStore, PayloadAction } from '@reduxjs/toolkit'
-
-export interface CotacaoState {
-  currentStep: number
-  cpf: string
-  productType: string | null
-  step2Data: Record<string, unknown>
-  step2IsValid: boolean
-  step3IsValid: boolean
-}
+import type {
+  CotacaoState,
+  CotacaoActions,
+  ProductDataUpdater,
+} from '@/types/cotacao'
 
 const initialState: CotacaoState = {
   currentStep: 1,
   cpf: '',
   productType: null,
-  step2Data: {},
-  step2IsValid: false,
-  step3IsValid: false,
+  isCurrentStepValid: false,
+  productData: {},
 }
 
 const cotacaoSlice = createSlice({
@@ -31,11 +26,13 @@ const cotacaoSlice = createSlice({
     setProductType: (state, action: PayloadAction<string>) => {
       state.productType = action.payload
     },
-    setStep2Data: (state, action: PayloadAction<Record<string, unknown>>) => {
-      state.step2Data = action.payload
+    setProductData: (state, action: PayloadAction<ProductDataUpdater>) => {
+      const updater = action.payload
+      state.productData =
+        typeof updater === 'function' ? updater(state.productData) : updater
     },
-    setStep2IsValid: (state, action: PayloadAction<boolean>) => {
-      state.step2IsValid = action.payload
+    setIsCurrentStepValid: (state, action: PayloadAction<boolean>) => {
+      state.isCurrentStepValid = action.payload
     },
     reset: (
       _state,
@@ -43,15 +40,21 @@ const cotacaoSlice = createSlice({
     ) => {
       return { ...initialState, ...action.payload }
     },
-  },
+  } satisfies Record<
+    keyof CotacaoActions,
+    (
+      state: CotacaoState,
+      action: PayloadAction<any> // eslint-disable-line
+    ) => void | CotacaoState
+  >,
 })
 
 export const {
   setCurrentStep,
   setCpf,
   setProductType,
-  setStep2Data,
-  setStep2IsValid,
+  setProductData,
+  setIsCurrentStepValid,
   reset,
 } = cotacaoSlice.actions
 
@@ -62,7 +65,7 @@ export const store = configureStore({
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
       serializableCheck: {
-        ignoredActions: ['cotacao/setStep2Data'],
+        ignoredActions: ['cotacao/setProductData'],
       },
     }),
 })
