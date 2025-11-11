@@ -155,9 +155,8 @@ const initialState: CotacaoState = {
   currentStep: 1,
   cpf: "",
   productType: null,
-  step2Data: {},
-  step2IsValid: false,
-  step3IsValid: false,
+  productData: {},
+  isCurrentStepValid: false,
 };
 
 const cotacaoSlice = createSlice({
@@ -173,11 +172,11 @@ const cotacaoSlice = createSlice({
     setProductType: (state, action: PayloadAction<string | null>) => {
       state.productType = action.payload;
     },
-    setStep2Data: (state, action: PayloadAction<Record<string, unknown>>) => {
-      state.step2Data = action.payload;
+    setProductData: (state, action: PayloadAction<Record<string, unknown>>) => {
+      state.productData = action.payload;
     },
-    setStep2IsValid: (state, action: PayloadAction<boolean>) => {
-      state.step2IsValid = action.payload;
+    setIsCurrentStepValid: (state, action: PayloadAction<boolean>) => {
+      state.isCurrentStepValid = action.payload;
     },
     reset: (
       _state,
@@ -192,8 +191,8 @@ export const {
   setCurrentStep,
   setCpf,
   setProductType,
-  setStep2Data,
-  setStep2IsValid,
+  setProductData,
+  setIsCurrentStepValid,
   reset,
 } = cotacaoSlice.actions;
 
@@ -201,7 +200,7 @@ export const store = configureStore({
   reducer: { cotacao: cotacaoSlice.reducer },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({
-      serializableCheck: { ignoredActions: ["cotacao/setStep2Data"] },
+      serializableCheck: { ignoredActions: ["cotacao/setProductData"] },
     }),
 });
 
@@ -218,14 +217,14 @@ import {
   setCurrentStep,
   setCpf,
   setProductType,
-  setStep2Data,
-  setStep2IsValid,
+  setProductData,
+  setIsCurrentStepValid,
   reset,
 } from "@/store/cotacaoStore";
 import type { CotacaoState } from "@/types/cotacao";
 
-export const useAppDispatch = useDispatch.withTypes<AppDispatch>();
-export const useAppSelector = useSelector.withTypes<RootState>();
+const useAppDispatch = useDispatch.withTypes<AppDispatch>();
+const useAppSelector = useSelector.withTypes<RootState>();
 
 export const useCotacaoStore = () => {
   const dispatch = useAppDispatch();
@@ -236,9 +235,10 @@ export const useCotacaoStore = () => {
     setCurrentStep: (step: number) => dispatch(setCurrentStep(step)),
     setCpf: (cpf: string) => dispatch(setCpf(cpf)),
     setProductType: (type: string | null) => dispatch(setProductType(type)),
-    setStep2Data: (data: Record<string, unknown>) =>
-      dispatch(setStep2Data(data)),
-    setStep2IsValid: (valid: boolean) => dispatch(setStep2IsValid(valid)),
+    setProductData: (data: Record<string, unknown>) =>
+      dispatch(setProductData(data)),
+    setIsCurrentStepValid: (valid: boolean) =>
+      dispatch(setIsCurrentStepValid(valid)),
     reset: (values?: Partial<CotacaoState>) => dispatch(reset(values)),
   };
 };
@@ -268,7 +268,7 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
 import { useCotacaoStore } from 'multicotadorHost/useCotacaoStore'
 
 function Step2() {
-  const { productType, step2Data, setStep2Data } = useCotacaoStore()
+  const { productType, productData, setProductData } = useCotacaoStore()
   // ...
   return <div>{productType}</div>
 }
