@@ -1,5 +1,5 @@
 import { Suspense } from 'react'
-import { useRemoteComponent } from '../hooks/useRemoteComponent'
+import { useRemoteComponent } from '@/hooks/useRemoteComponent'
 
 type RemoteModule = './Step2' | './Step3'
 
