@@ -6,13 +6,17 @@
       "dependsOn": ["^build"],
       "outputs": ["dist/**", ".next/**", "build/**"]
     },
+    "config:generate": {
+      "cache": false,
+      "outputs": ["../multicotador-host/public/config.json"]
+    },
     "dev": {
+      "dependsOn": ["^config:generate"],
       "cache": false,
       "persistent": true
     },
     "lint": {
-      "dependsOn": ["^lint"],
-      "cache": true
+      "dependsOn": ["^lint"]
     },
     "lint:fix": {
       "cache": false
@@ -20,9 +24,7 @@
     "format": {
       "cache": false
     },
-    "format:check": {
-      "cache": true
-    },
+    "format:check": {},
     "type-check": {
       "dependsOn": ["^type-check"]
     },
