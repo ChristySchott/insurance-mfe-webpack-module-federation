@@ -1,0 +1,20 @@
+version: '1.0.0'
+
+products:
+  - id: auto
+    name: Seguro Auto
+    scope: autoMfe
+    url: https://qa-auto.com/remoteEntry.js
+    enabled: true
+
+  - id: home
+    name: Seguro Residencial
+    scope: homeMfe
+    url: https://qa-home.com/remoteEntry.js
+    enabled: true
+
+  - id: life
+    name: Seguro de Vida
+    scope: lifeMfe
+    url: https://qa-life.com/remoteEntry.js
+    enabled: false

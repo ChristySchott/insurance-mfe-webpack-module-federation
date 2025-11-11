@@ -1,0 +1,24 @@
+{
+  "name": "insurance-config",
+  "version": "1.0.0",
+  "description": "",
+  "scripts": {
+    "config:generate": "tsx scripts/validate-config.ts dev && tsx scripts/convert-yaml-to-json.ts dev",
+    "build:dev": "tsx scripts/validate-config.ts dev && tsx scripts/convert-yaml-to-json.ts dev",
+    "build:qa": "tsx scripts/validate-config.ts qa && tsx scripts/convert-yaml-to-json.ts qa",
+    "build:prod": "tsx scripts/validate-config.ts prod && tsx scripts/convert-yaml-to-json.ts prod"
+  },
+  "dependencies": {
+    "js-yaml": "^4.1.0",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@insurance-mfe/eslint-config": "workspace:*",
+    "@insurance-mfe/prettier-config": "workspace:*",
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^20.19.21",
+    "nodemon": "^3.0.2",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  }
+}
