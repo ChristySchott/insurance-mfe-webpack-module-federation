@@ -18,29 +18,32 @@ export function useProductForm<T extends FieldValues>({
   schema,
   defaultValues,
 }: UseProductFormProps<T>): UseFormReturn<T> {
-  const { step2Data, setStep2Data, setStep2IsValid, step2IsValid } =
+  const { productData, setProductData, setIsCurrentStepValid } =
     useCotacaoStore()
 
   const form = useForm<T>({
     resolver: zodResolver(schema),
     mode: 'onBlur',
-    defaultValues: defaultValues || (step2Data as DefaultValues<T>),
+    defaultValues: defaultValues || (productData as DefaultValues<T>),
   })
 
-  const { watch, formState } = form
+  const { formState, watch } = form
   const { isValid } = formState
 
   useEffect(() => {
-    setStep2IsValid(isValid)
-  }, [isValid, setStep2IsValid, step2IsValid])
+    setIsCurrentStepValid(isValid)
+  }, [isValid, setIsCurrentStepValid])
 
   useEffect(() => {
     const subscription = watch((formData) => {
-      setStep2Data(formData as Record<string, unknown>)
+      setProductData((prev) => ({
+        ...prev,
+        ...(formData as Record<string, unknown>),
+      }))
     })
 
     return () => subscription.unsubscribe()
-  }, [watch, setStep2Data])
+  }, [watch, setProductData])
 
   return form
 }

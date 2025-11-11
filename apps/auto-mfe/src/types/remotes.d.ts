@@ -1,19 +1,28 @@
 declare module 'multicotadorHost/useCotacaoStore' {
-  export interface CotacaoStore {
+  interface CotacaoState {
     currentStep: number
-    setCurrentStep: (step: number) => void
+    isCurrentStepValid: boolean
     cpf: string
     productType: string | null
+    productData: Record<string, unknown>
+  }
+
+  type ProductData = Record<string, unknown>
+
+  export type ProductDataUpdater =
+    | ProductData
+    | ((prev: ProductData) => ProductData)
+
+  interface CotacaoActions {
+    setCurrentStep: (step: number) => void
     setCpf: (cpf: string) => void
     setProductType: (type: string) => void
-    step2Data: Record<string, unknown>
-    step2IsValid: boolean
-    setStep2Data: (data: Record<string, unknown>) => void
-    setStep2IsValid: (valid: boolean) => void
-    offers: unknown[]
-    step3IsValid: boolean
-    reset: () => void
+    setProductData: (data: ProductDataUpdater) => void
+    setIsCurrentStepValid: (valid: boolean) => void
+    reset: (values?: Partial<CotacaoState>) => void
   }
+
+  interface CotacaoStore extends CotacaoState, CotacaoActions {}
 
   export function useCotacaoStore(): CotacaoStore
 }
