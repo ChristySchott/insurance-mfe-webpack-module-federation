@@ -348,17 +348,18 @@ function Step2() {
 │       │   ├── components
 │       │   │   ├── ErrorBoundary.tsx
 │       │   │   ├── LoadingSpinner.tsx
-│       │   │   ├── Navigation.tsx
 │       │   │   ├── ProductOption.tsx
 │       │   │   ├── ProductTypeSelector.tsx
 │       │   │   ├── RemoteComponent.tsx
 │       │   │   ├── StepProgress.tsx
-│       │   │   ├── steps
-│       │   │   │   ├── Step1.tsx
-│       │   │   │   ├── Step2.tsx
-│       │   │   │   ├── Step3.tsx
-│       │   │   │   └── Step4.tsx
-│       │   │   └── StepWizard.tsx
+│       │   │   └── steps
+│       │   │       ├── Step1.tsx
+│       │   │       ├── Step2.tsx
+│       │   │       ├── Step3.tsx
+│       │   │       ├── Step4.tsx
+│       │   │       ├── StepWizard.tsx
+│       │   │       ├── StepNavigation.tsx
+│       │   │       └── StepProgress.tsx
 │       │   ├── config
 │       │   │   └── remoteConfig.ts
 │       │   ├── hooks
@@ -374,8 +375,8 @@ function Step2() {
 │       │   │   └── cotacaoStore.ts
 │       │   └── types
 │       │       ├── cotacao.ts
-│       │       ├── remoteConfig.ts
-│       │       └── remotes.d.ts
+│       │       └── remoteConfig.ts
+│       │
 │       └── webpack.config.ts
 ├── package.json
 ├── packages
