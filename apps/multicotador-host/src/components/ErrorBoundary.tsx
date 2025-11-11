@@ -53,7 +53,7 @@ export class ErrorBoundary extends Component<
       return (
         <div className="rounded-lg border border-red-200 bg-red-50 p-6">
           <div className="flex">
-            <div className="flex-shrink-0">
+            <div className="shrink-0">
               <svg
                 className="h-5 w-5 text-red-400"
                 viewBox="0 0 20 20"
@@ -72,17 +72,6 @@ export class ErrorBoundary extends Component<
               </h3>
               <div className="mt-2 text-sm text-red-700">
                 <p>Desculpe, ocorreu um erro inesperado.</p>
-                {import.meta.env.NODE_ENV !== 'production' &&
-                  this.state.error && (
-                    <details className="mt-2">
-                      <summary className="cursor-pointer font-medium">
-                        Detalhes do erro
-                      </summary>
-                      <pre className="mt-2 whitespace-pre-wrap text-xs">
-                        {this.state.error.toString()}
-                      </pre>
-                    </details>
-                  )}
               </div>
               <div className="mt-4">
                 <button
