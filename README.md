@@ -38,6 +38,8 @@ A **Proof of Concept** demonstrating **Webpack 5 Module Federation** with dynami
 
 Multi‑product quote system where each type of insurance (Auto, Home, etc.) is built and deployed independently as a **Microfrontend**. The app works as a single wizard with **4 steps**, where **steps 2 and 3** change according to the selected product. The main idea is to let different teams work on different products without coordinated deploys, and to add new products without touching the host.
 
+![Architecture](./docs/architecture.png)
+
 ---
 
 ## ✅ Requirements (summary)
