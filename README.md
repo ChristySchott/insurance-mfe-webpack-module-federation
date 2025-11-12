@@ -437,55 +437,384 @@ That would force a host rebuild for every new product.
 
 - `id`: business identifier
 - `name`: UI label
-- `scope`: Module Federation container name (**matches `name` in the product’s `webpack.config.ts`**)
+- `scope`: Module Federation container name (**matches `name` in the product's `webpack.config.ts`**)
 - `url`: `remoteEntry.js` endpoint
 - `enabled`: feature toggle per product
 
-### `loadRemoteModule.ts` — essentials
+### How dynamic remote loading works
 
-```ts
+The system loads remote modules through a four-phase process:
+
+#### 1. Script loading (`loadRemoteScript`)
+
+Downloads the remote's JavaScript bundle and injects it into the DOM:
+
+```typescript
+function loadRemoteScript(url: string, scope: string): Promise<void>;
+```
+
+**Process:**
+
+- Checks cache: Returns existing promise if script is already loading
+- Checks DOM: Skips if script tag already exists
+- Injects script: Creates `<script>` tag with `data-scope` and `data-url` attributes
+- Handles errors: Cleans up failed scripts from cache and DOM
+- Prevents duplicates: Caches loading promises to avoid parallel requests
+
+**Example:**
+
+```typescript
+// Downloads http://localhost:3001/remoteEntry.js
+await loadRemoteScript("http://localhost:3001/remoteEntry.js", "homeMfe");
+// Result: <script data-scope="homeMfe" data-url="..." src="..."></script> added to DOM
+```
+
+#### 2. Container discovery (`waitForRemoteContainerToAppearOnWindow`)
+
+Waits for the remote container to register itself on the window object:
+
+```typescript
+function waitForRemoteContainerToAppearOnWindow(
+  scope: string
+): Promise<RemoteContainer | null>;
+```
+
+**Why polling is necessary:**
+
+- Script's `onload` fires when file downloads, not when code executes
+- Remote container registration happens inside the script's execution
+- No browser event signals when the container is ready
+
+**Polling mechanism:**
+
+- Checks `window[scope]` every 100ms
+- Maximum 10 attempts (1 second total)
+- Returns null if container never appears
+
+**Timeline example:**
+
+```
+0ms:    Script onload fires ✓
+100ms:  Check window.homeMfe → undefined ❌
+200ms:  Check window.homeMfe → undefined ❌
+250ms:  [remoteEntry.js finishes executing]
+300ms:  window.homeMfe = { init, get } ✓
+300ms:  Check window.homeMfe → Found! ✅
+```
+
+#### 3. Container initialization (`loadRemoteContainer`)
+
+Orchestrates loading and initializes Module Federation sharing:
+
+```typescript
+async function loadRemoteContainer(
+  url: string,
+  scope: string
+): Promise<RemoteContainer>;
+```
+
+**Process:**
+
+- **Check cache:** Return cached container if already initialized
+- **Load script:** Download and inject the remote bundle
+- **Wait for container:** Poll until `window[scope]` exists
+- **Initialize sharing:** Set up shared dependencies (React, Redux, etc.)
+- **Cache container:** Store for future module requests
+
+**The Module Federation handshake:**
+
+```typescript
+await __webpack_init_sharing__("default"); // Prepare shared scope
+await container.init(__webpack_share_scopes__.default); // Tell remote about shared deps
+```
+
+This ensures:
+
+- Single React instance across host and remotes
+- Singleton Redux store
+- Shared dependencies satisfy version requirements
+
+#### 4. Module loading (`loadRemoteModule`)
+
+Retrieves specific modules (components) from an initialized container:
+
+```typescript
+export async function loadRemoteModule<T>(
+  options: LoadRemoteModuleOptions
+): Promise<T>;
+```
+
+**Process:**
+
+- Get initialized container (via `loadRemoteContainer`)
+- Request module using `container.get(modulePath)`
+- Execute factory function to get actual module
+- Return module (typically React component)
+
+**Factory pattern:**
+
+```typescript
+const factory = await container.get("./Step2"); // Returns factory function
+const module = factory(); // Execute to get module
+return module.default; // Extract default export (React component)
+```
+
+### Complete loading flow
+
+```
+User selects product "Home Insurance"
+         ↓
+loadRemoteModule({ url: '...', scope: 'homeMfe', module: './Step2' })
+         ↓
+   loadRemoteContainer('...', 'homeMfe')
+         ↓
+   ┌─────┴─────┐
+   ↓           ↓
+Cache hit?   Cache miss
+   ↓           ↓
+Return    loadRemoteScript(url, scope)
+cached         ↓
+container   Download remoteEntry.js
+            Add <script> to DOM
+            Wait for onload
+              ↓
+         waitForRemoteContainerToAppearOnWindow('homeMfe')
+              ↓
+         Poll window.homeMfe every 100ms
+              ↓
+         Container found!
+              ↓
+         __webpack_init_sharing__('default')
+         container.init(__webpack_share_scopes__.default)
+              ↓
+         Cache initialized container
+              ↓
+    container.get('./Step2')
+              ↓
+    factory() → { default: Step2Component }
+              ↓
+    Return Step2Component
+              ↓
+    <Step2Component /> renders in UI
+```
+
+### Cache management and retry logic
+
+**Caching strategy:**
+
+- `loadedContainers`: Initialized remote containers (permanent until cleared)
+- `loadingScripts`: In-flight script download promises (temporary, 1s TTL)
+
+**Retry mechanism:**
+
+When a remote fails to load, users can retry via the error UI. The `clearRemoteCache` function ensures fresh requests:
+
+```typescript
+export function clearRemoteCache(url?: string, scope?: string) {
+  if (url && scope) {
+    const cacheKey = `${scope}@${url}`;
+
+    // Clear cached container
+    loadedContainers.delete(cacheKey);
+
+    // Clear loading promise
+    loadingScripts.delete(cacheKey);
+
+    // Remove failed script tag from DOM
+    const scriptAlreadyAddedToDOM = document.querySelector(
+      `script[data-scope="${scope}"][data-url="${url}"]`
+    );
+    if (scriptAlreadyAddedToDOM) {
+      scriptAlreadyAddedToDOM.remove();
+    }
+  } else {
+    // Clear all caches
+    loadedContainers.clear();
+    loadingScripts.clear();
+    document
+      .querySelectorAll("script[data-scope][data-url]")
+      .forEach((script) => {
+        script.remove();
+      });
+  }
+}
+```
+
+**Retry scenarios:**
+
+| Scenario                                     | Expected Behavior                      |
+| -------------------------------------------- | -------------------------------------- |
+| Remote down initially → Start remote → Retry | ✅ Loads successfully                  |
+| Network timeout → Network recovers → Retry   | ✅ Fresh request                       |
+| Remote crashes → Remote restarts → Retry     | ✅ Reloads from scratch                |
+| Both running → Remote down → Retry           | ✅ Shows error, can retry when back up |
+
+### `loadRemoteModule.ts` — complete implementation
+
+```typescript
 interface RemoteContainer {
   init(shareScope: unknown): Promise<void>;
   get(module: string): Promise<() => unknown>;
+}
+
+interface LoadRemoteModuleOptions {
+  url: string;
+  scope: string;
+  module: string;
 }
 
 declare const __webpack_init_sharing__: (shareScope: string) => Promise<void>;
 declare const __webpack_share_scopes__: { default: unknown };
 
 const loadedContainers = new Map<string, RemoteContainer>();
-const failedScripts = new Set<string>();
+const loadingScripts = new Map<string, Promise<void>>();
+
+export function clearRemoteCache(url?: string, scope?: string) {
+  if (url && scope) {
+    const cacheKey = `${scope}@${url}`;
+    loadedContainers.delete(cacheKey);
+    loadingScripts.delete(cacheKey);
+
+    const scriptAlreadyAddedToDOM = document.querySelector(
+      `script[data-scope="${scope}"][data-url="${url}"]`
+    );
+    if (scriptAlreadyAddedToDOM) {
+      scriptAlreadyAddedToDOM.remove();
+    }
+    return;
+  }
+
+  loadedContainers.clear();
+  loadingScripts.clear();
+  document
+    .querySelectorAll("script[data-scope][data-url]")
+    .forEach((script) => {
+      script.remove();
+    });
+}
+
+async function prepareSharedDependencies() {
+  await __webpack_init_sharing__("default");
+}
+
+async function tellRemoteContainerAboutSharedDeps(container: RemoteContainer) {
+  await prepareSharedDependencies();
+  await container.init(__webpack_share_scopes__.default);
+}
 
 async function loadRemoteContainer(
   url: string,
   scope: string
 ): Promise<RemoteContainer> {
   const cacheKey = `${scope}@${url}`;
-  if (loadedContainers.has(cacheKey)) return loadedContainers.get(cacheKey)!;
-  if (failedScripts.has(cacheKey))
-    throw new Error(`Remote script previously failed to load: ${url}`);
+
+  if (loadedContainers.has(cacheKey)) {
+    return loadedContainers.get(cacheKey)!;
+  }
 
   await loadRemoteScript(url, scope);
-  const container = await waitForContainer(scope, url);
+  const container = await waitForRemoteContainerToAppearOnWindow(scope);
+
   if (!container) {
-    failedScripts.add(cacheKey);
     throw new Error(`Remote container "${scope}" not found at ${url}`);
   }
 
-  await __webpack_init_sharing__("default");
-  await container.init(__webpack_share_scopes__.default);
+  await tellRemoteContainerAboutSharedDeps(container);
 
   loadedContainers.set(cacheKey, container);
   return container;
 }
 
-export async function loadRemoteModule<T = React.ComponentType>(opts: {
-  url: string;
-  scope: string;
-  module: string;
-}): Promise<T> {
-  const container = await loadRemoteContainer(opts.url, opts.scope);
-  const factory = await container.get(opts.module);
-  return factory() as T;
+function waitForRemoteContainerToAppearOnWindow(
+  scope: string
+): Promise<RemoteContainer | null> {
+  return new Promise((resolve) => {
+    let attempts = 0;
+    const maxAttemptsToCheckIfRemoteContainerExists = 10;
+
+    const checkIfContainerExistsOnWindow = () => {
+      const container = (window as unknown as Record<string, RemoteContainer>)[
+        scope
+      ];
+
+      if (container) {
+        resolve(container);
+        return;
+      }
+
+      attempts++;
+
+      if (attempts >= maxAttemptsToCheckIfRemoteContainerExists) {
+        resolve(null);
+        return;
+      }
+
+      // Polling is necessary because no event tells us when the container is ready
+      setTimeout(checkIfContainerExistsOnWindow, 50);
+    };
+
+    checkIfContainerExistsOnWindow();
+  });
+}
+
+function loadRemoteScript(url: string, scope: string): Promise<void> {
+  const cacheKey = `${scope}@${url}`;
+
+  if (loadingScripts.has(cacheKey)) {
+    return loadingScripts.get(cacheKey)!;
+  }
+
+  const promise = new Promise<void>((resolve, reject) => {
+    const scriptAlreadyAddedToDOM = document.querySelector(
+      `script[data-scope="${scope}"][data-url="${url}"]`
+    );
+
+    if (scriptAlreadyAddedToDOM) {
+      resolve();
+      return;
+    }
+
+    const script = document.createElement("script");
+    script.src = url;
+    script.type = "text/javascript";
+    script.async = true;
+    script.setAttribute("data-scope", scope);
+    script.setAttribute("data-url", url);
+
+    script.onload = () => {
+      resolve();
+    };
+
+    script.onerror = () => {
+      loadingScripts.delete(cacheKey);
+      script.remove();
+      reject(new Error(`Failed to load remote script: ${url}`));
+    };
+
+    document.head.appendChild(script);
+  });
+
+  loadingScripts.set(cacheKey, promise);
+
+  promise.finally(() => {
+    setTimeout(() => loadingScripts.delete(cacheKey), 1000);
+  });
+
+  return promise;
+}
+
+export async function loadRemoteModule<T = React.ComponentType>(
+  options: LoadRemoteModuleOptions
+): Promise<T> {
+  try {
+    const container = await loadRemoteContainer(options.url, options.scope);
+    const createModuleFactory = await container.get(options.module);
+    const module = createModuleFactory();
+    return module as T;
+  } catch (error) {
+    console.error("[loadRemoteModule] Failed to load:", options, error);
+    throw error;
+  }
 }
 ```
 
@@ -501,7 +830,7 @@ let cachedConfig: RemoteConfig | null = null;
 export async function fetchRemoteConfig(): Promise<RemoteConfig> {
   if (cachedConfig) return cachedConfig;
   try {
-    const res = await fetch(getConfigUrl(), { cache: "no-cache" });
+    const res = await fetch(configUrl, { cache: "no-cache" });
     if (!res.ok) throw new Error(`Config fetch failed: ${res.status}`);
     cachedConfig = (await res.json()) as RemoteConfig;
     return cachedConfig;
@@ -542,6 +871,13 @@ export function useRemoteProducts() {
   return { products, loading, error, getProduct };
 }
 ```
+
+**Optimization notes:**
+
+- Containers are cached indefinitely until manually cleared
+- Multiple components from same remote reuse cached container
+- Loading promises prevent duplicate parallel downloads
+- Failed loads are cleaned up to enable successful retries
 
 ---
 
