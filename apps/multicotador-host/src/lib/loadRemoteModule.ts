@@ -15,6 +15,43 @@ declare const __webpack_share_scopes__: { default: unknown }
 const loadedContainers = new Map<string, RemoteContainer>()
 const loadingScripts = new Map<string, Promise<void>>()
 
+export function clearRemoteCache(url?: string, scope?: string) {
+  if (url && scope) {
+    const cacheKey = `${scope}@${url}`
+
+    loadedContainers.delete(cacheKey)
+    loadingScripts.delete(cacheKey)
+
+    const scriptAlreadyAddedToDOM = document.querySelector(
+      `script[data-scope="${scope}"][data-url="${url}"]`
+    )
+
+    if (scriptAlreadyAddedToDOM) {
+      scriptAlreadyAddedToDOM.remove()
+    }
+
+    return
+  }
+
+  loadedContainers.clear()
+  loadingScripts.clear()
+
+  document
+    .querySelectorAll('script[data-scope][data-url]')
+    .forEach((script) => {
+      script.remove()
+    })
+}
+
+async function prepareSharedDependencies() {
+  await __webpack_init_sharing__('default')
+}
+
+async function tellRemoteContainerAboutSharedDeps(container: RemoteContainer) {
+  prepareSharedDependencies()
+  await container.init(__webpack_share_scopes__.default)
+}
+
 async function loadRemoteContainer(
   url: string,
   scope: string
@@ -27,24 +64,26 @@ async function loadRemoteContainer(
 
   await loadRemoteScript(url, scope)
 
-  const container = await waitForContainer(scope)
+  const container = await waitForRemoteContainerToAppearOnWindow(scope)
 
   if (!container) {
     throw new Error(`Remote container "${scope}" not found at ${url}`)
   }
 
-  await __webpack_init_sharing__('default')
-  await container.init(__webpack_share_scopes__.default)
+  await tellRemoteContainerAboutSharedDeps(container)
 
   loadedContainers.set(cacheKey, container)
   return container
 }
 
-function waitForContainer(scope: string): Promise<RemoteContainer | null> {
+function waitForRemoteContainerToAppearOnWindow(
+  scope: string
+): Promise<RemoteContainer | null> {
   return new Promise((resolve) => {
     let attempts = 0
+    const maxAttemptsToCheckIfRemoteContainerExists = 10
 
-    const checkContainer = () => {
+    const checkIfContainerExistsOnWindow = () => {
       const container = (window as unknown as Record<string, RemoteContainer>)[
         scope
       ]
@@ -56,15 +95,15 @@ function waitForContainer(scope: string): Promise<RemoteContainer | null> {
 
       attempts++
 
-      if (attempts >= 10) {
+      if (attempts >= maxAttemptsToCheckIfRemoteContainerExists) {
         resolve(null)
         return
       }
 
-      setTimeout(checkContainer, 100)
+      setTimeout(checkIfContainerExistsOnWindow, 100) //Polling is necessary because no event tell us when the container is ready
     }
 
-    checkContainer()
+    checkIfContainerExistsOnWindow()
   })
 }
 
@@ -76,15 +115,16 @@ function loadRemoteScript(url: string, scope: string): Promise<void> {
   }
 
   const promise = new Promise<void>((resolve, reject) => {
-    const existingScript = document.querySelector(
+    const scriptAlreadyAddedToDOM = document.querySelector(
       `script[data-scope="${scope}"][data-url="${url}"]`
     )
 
-    if (existingScript) {
+    if (scriptAlreadyAddedToDOM) {
       resolve()
       return
     }
 
+    // Create and inject script tag
     const script = document.createElement('script')
     script.src = url
     script.type = 'text/javascript'
@@ -93,14 +133,16 @@ function loadRemoteScript(url: string, scope: string): Promise<void> {
     script.setAttribute('data-url', url)
 
     script.onload = () => {
-      resolve()
+      resolve() // Script downloaded successfully
     }
 
     script.onerror = () => {
       loadingScripts.delete(cacheKey)
+      script.remove()
       reject(new Error(`Failed to load remote script: ${url}`))
     }
 
+    // Add to DOM and start download
     document.head.appendChild(script)
   })
 
@@ -118,8 +160,8 @@ export async function loadRemoteModule<T = React.ComponentType>(
 ): Promise<T> {
   try {
     const container = await loadRemoteContainer(options.url, options.scope)
-    const factory = await container.get(options.module)
-    const module = factory()
+    const createModuleFactory = await container.get(options.module)
+    const module = createModuleFactory()
     return module as T
   } catch (error) {
     console.error('[loadRemoteModule] Failed to load:', options, error)

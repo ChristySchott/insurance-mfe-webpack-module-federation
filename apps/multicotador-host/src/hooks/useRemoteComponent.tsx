@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import type { RemoteComponentModule } from '@/types/remoteConfig'
-import { loadRemoteModule } from '@/lib/loadRemoteModule'
+import { clearRemoteCache, loadRemoteModule } from '@/lib/loadRemoteModule'
 
 interface UseRemoteComponentOptions {
   url: string
@@ -16,20 +16,13 @@ interface UseRemoteComponentReturn {
 }
 
 export function useRemoteComponent(
-  options: UseRemoteComponentOptions | null
+  options: UseRemoteComponentOptions
 ): UseRemoteComponentReturn {
   const [Component, setComponent] = useState<React.ComponentType | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
   const loadComponent = useCallback(async () => {
-    if (!options) {
-      setComponent(null)
-      setLoading(false)
-      setError(null)
-      return
-    }
-
     setLoading(true)
     setError(null)
 
@@ -53,9 +46,10 @@ export function useRemoteComponent(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const retry = useCallback(() => {
+  const retry = () => {
+    clearRemoteCache(options.url, options.scope)
     loadComponent()
-  }, [loadComponent])
+  }
 
   return { Component, loading, error, retry }
 }
