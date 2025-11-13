@@ -888,24 +888,112 @@ export function useRemoteProducts() {
 1. **Create the MFE** and expose `Step2`/`Step3` in `webpack.config.ts`:
 
 ```ts
-new ModuleFederationPlugin({
-  name: "petMfe", // must match `scope` in config.json
-  filename: "remoteEntry.js",
-  exposes: { "./Step2": "./src/steps/Step2", "./Step3": "./src/steps/Step3" },
-  remotes: {
-    multicotadorHost: "multicotadorHost@http://localhost:3000/remoteEntry.js",
+import HtmlWebpackPlugin from "html-webpack-plugin";
+import webpack from "webpack";
+import path from "path";
+import { fileURLToPath } from "url";
+
+const { ModuleFederationPlugin } = webpack.container;
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const isProduction = process.env.NODE_ENV === "production";
+
+const config: webpack.Configuration = {
+  entry: "./src/index.ts",
+  mode: isProduction ? "production" : "development",
+  devtool: isProduction ? "source-map" : "eval-source-map",
+  output: {
+    path: path.resolve(__dirname, "dist"),
+    filename: isProduction ? "[name].[contenthash:8].js" : "[name].js",
+    chunkFilename: isProduction
+      ? "[name].[contenthash:8].chunk.js"
+      : "[name].chunk.js",
+    clean: true,
+    publicPath: "auto", // Critical for MF
+    uniqueName: "petMfe", // Must match MF name
   },
-  shared: {
-    react: { singleton: true, requiredVersion: "^18.3.1", eager: false },
-    "react-dom": { singleton: true, requiredVersion: "^18.3.1", eager: false },
-    "@reduxjs/toolkit": {
-      singleton: true,
-      requiredVersion: "^2.10.1",
-      eager: false,
+  resolve: {
+    extensions: [".ts", ".tsx", ".js", ".jsx", ".json"],
+    alias: {
+      "@": path.resolve(__dirname, "src"),
     },
-    "react-redux": { singleton: true, requiredVersion: "^9.2.0", eager: false },
   },
-});
+  module: {
+    rules: [
+      //...
+    ],
+  },
+  plugins: [
+    new ModuleFederationPlugin({
+      name: "petMfe", // Must match `scope` in config.json or config.yaml
+      filename: "remoteEntry.js",
+      // Expose your steps (required)
+      exposes: {
+        "./Step2": "./src/steps/Step2.tsx",
+        "./Step3": "./src/steps/Step3.tsx",
+      },
+      // Connect to host (required to access shared store)
+      remotes: {
+        multicotadorHost:
+          "multicotadorHost@http://localhost:3000/remoteEntry.js",
+      },
+      // Match host's shared dependencies EXACTLY
+      shared: {
+        react: {
+          singleton: true,
+          requiredVersion: "^18.3.1",
+          strictVersion: false,
+          eager: false, // ⚠️ Must be false for remotes
+        },
+        "react-dom": {
+          singleton: true,
+          requiredVersion: "^18.3.1",
+          strictVersion: false,
+          eager: false,
+        },
+        "@reduxjs/toolkit": {
+          singleton: true,
+          requiredVersion: "^2.10.1",
+          strictVersion: false,
+          eager: false,
+        },
+        "react-redux": {
+          singleton: true,
+          requiredVersion: "^9.2.0",
+          strictVersion: false,
+          eager: false,
+        },
+      },
+    }),
+    new HtmlWebpackPlugin({
+      template: "./index.html",
+      inject: "body",
+    }),
+  ],
+  optimization: {
+    moduleIds: "deterministic",
+    // Do NOT use runtimeChunk for dynamic remotes
+    // runtimeChunk: 'single', ❌ This breaks dynamic loading
+    splitChunks: {
+      chunks: "async", // ⚠️ Use 'async' not 'all' for remotes
+      //...
+    },
+    minimize: isProduction,
+    usedExports: true,
+  },
+  devServer: {
+    port: 3003, // Use unique port
+    hot: true,
+    headers: {
+      "Access-Control-Allow-Origin": "*",
+    },
+    allowedHosts: "all",
+  },
+};
+
+export default config;
 ```
 
 2. **Update `config.yaml`/`config.json`** with the new product and environment URLs
@@ -913,6 +1001,45 @@ new ModuleFederationPlugin({
 3. **Regenerate config** (CI/CD or locally)
 
 4. **Reload the host** — the product appears automatically in Step 1
+
+Expected behavior:
+
+✅ Host loads without errors
+✅ New product appears in Step 1 dropdown
+✅ Selecting product loads Step2/Step3 dynamically
+✅ Shared Redux store works across host and remote
+
+---
+
+## 🔍 Troubleshooting new products
+
+**Error: "Remote container not found"**
+
+**Cause**: Webpack optimization settings breaking dynamic loading
+**Fix**: Ensure remote's webpack.config.ts has:
+
+```ts
+optimization: {
+  // runtimeChunk: 'single', ❌ Remove this
+  splitChunks: {
+    chunks: 'async', // ✅ Use async
+  },
+}
+```
+
+**Error: "Shared module is not available for eager consumption"**
+
+**Cause**: eager: true in remote's shared config
+**Fix**: Ensure `eager: false` for remotes
+
+```ts
+shared: {
+  react: {
+    //...
+    eager: false,
+  },
+}
+```
 
 ---
 
