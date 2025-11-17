@@ -1,3 +1,5 @@
+import { RemoteSecurityError } from './error'
+
 interface RemoteContainer {
   init(shareScope: unknown): Promise<void>
   get(module: string): Promise<() => unknown>
@@ -14,6 +16,53 @@ declare const __webpack_share_scopes__: { default: unknown }
 
 const loadedContainers = new Map<string, RemoteContainer>()
 const loadingScripts = new Map<string, Promise<void>>()
+
+const allowedOrigins =
+  process.env.NODE_ENV === 'production'
+    ? [
+        'https://cdn.example.com',
+        'https://auto-mfe.example.com',
+        'https://home-mfe.example.com',
+        'https://life-mfe.example.com',
+      ]
+    : [
+        'http://localhost:3000',
+        'http://localhost:3001',
+        'http://localhost:3002',
+        'http://localhost:3003',
+      ]
+
+function validateRemoteUrl(url: string): void {
+  let parsedUrl: URL
+
+  try {
+    parsedUrl = new URL(url)
+  } catch {
+    throw new RemoteSecurityError(`Invalid URL format: ${url}`, url)
+  }
+
+  if (
+    process.env.NODE_ENV === 'production' &&
+    parsedUrl.protocol !== 'https:'
+  ) {
+    throw new RemoteSecurityError(
+      `HTTPS required in production. Received: ${parsedUrl.protocol}//${parsedUrl.host}`,
+      url
+    )
+  }
+
+  const urlOrigin = `${parsedUrl.protocol}//${parsedUrl.host}`
+  const isAllowed = allowedOrigins.some((allowedOrigin) =>
+    urlOrigin.startsWith(allowedOrigin)
+  )
+
+  if (!isAllowed) {
+    throw new RemoteSecurityError(
+      `Origin not in allowlist. Received: ${urlOrigin}.`,
+      url
+    )
+  }
+}
 
 export function clearRemoteCache(url?: string, scope?: string) {
   if (url && scope) {
@@ -48,7 +97,7 @@ async function prepareSharedDependencies() {
 }
 
 async function tellRemoteContainerAboutSharedDeps(container: RemoteContainer) {
-  prepareSharedDependencies()
+  await prepareSharedDependencies()
   await container.init(__webpack_share_scopes__.default)
 }
 
@@ -56,6 +105,8 @@ async function loadRemoteContainer(
   url: string,
   scope: string
 ): Promise<RemoteContainer> {
+  validateRemoteUrl(url)
+
   const cacheKey = `${scope}@${url}`
 
   if (loadedContainers.has(cacheKey)) {
@@ -164,7 +215,11 @@ export async function loadRemoteModule<T = React.ComponentType>(
     const module = createModuleFactory()
     return module as T
   } catch (error) {
-    console.error('[loadRemoteModule] Failed to load:', options, error)
+    if (error instanceof RemoteSecurityError) {
+      console.error('[loadRemoteModule] Security violation:', error.message)
+    } else {
+      console.error('[loadRemoteModule] Failed to load:', options, error)
+    }
     throw error
   }
 }
