@@ -145,7 +145,13 @@ We tried storing state in `sessionStorage` and notifying changes via `BroadcastC
 - **Familiar API** (close to our prior Zustand hooks)
 - **Redux DevTools** (inspect state/actions, time‑travel)
 - **Optimized performance** (Immer + memoized selectors)
-- **Trade‑offs:** ~**+10 kB gz** vs. sessionStorage‑only; a `Provider` in the host; one extra dependency
+
+⚠️ Trade-offs of shared Redux
+
+**Coupling**: All MFEs depend on the host's store shape. If the host changes the `cotacao` slice structure, remotes break until updated. This conflicts with the "independent deploys" promise of microfrontends.
+**Configuration overhead**: Every MFE must declare identical shared dependency versions with matching singleton configs. Version mismatches cause cryptic runtime errors.
+**Bundle cost**: ~10 kB gzipped + Provider setup in host.
+**Why I accepted this**: The wizard requires immediate state consistency. Step 4 must display all data from Steps 1-3 without stale reads or race conditions. The coupling reflects the domain reality: these steps aren't independent features, they're one user journey. Event-based "decoupling" would just hide the dependency while adding failure modes.
 
 #### Store (`src/store/cotacaoStore.ts`) — excerpt
 
@@ -654,6 +660,8 @@ export function clearRemoteCache(url?: string, scope?: string) {
 ### `loadRemoteModule.ts` — complete implementation
 
 ```typescript
+import { RemoteSecurityError } from "./error";
+
 interface RemoteContainer {
   init(shareScope: unknown): Promise<void>;
   get(module: string): Promise<() => unknown>;
@@ -671,23 +679,74 @@ declare const __webpack_share_scopes__: { default: unknown };
 const loadedContainers = new Map<string, RemoteContainer>();
 const loadingScripts = new Map<string, Promise<void>>();
 
+const allowedOrigins =
+  process.env.NODE_ENV === "production"
+    ? [
+        "https://cdn.example.com",
+        "https://auto-mfe.example.com",
+        "https://home-mfe.example.com",
+        "https://life-mfe.example.com",
+      ]
+    : [
+        "http://localhost:3000",
+        "http://localhost:3001",
+        "http://localhost:3002",
+        "http://localhost:3003",
+      ];
+
+function validateRemoteUrl(url: string): void {
+  let parsedUrl: URL;
+
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    throw new RemoteSecurityError(`Invalid URL format: ${url}`, url);
+  }
+
+  if (
+    process.env.NODE_ENV === "production" &&
+    parsedUrl.protocol !== "https:"
+  ) {
+    throw new RemoteSecurityError(
+      `HTTPS required in production. Received: ${parsedUrl.protocol}//${parsedUrl.host}`,
+      url
+    );
+  }
+
+  const urlOrigin = `${parsedUrl.protocol}//${parsedUrl.host}`;
+  const isAllowed = allowedOrigins.some((allowedOrigin) =>
+    urlOrigin.startsWith(allowedOrigin)
+  );
+
+  if (!isAllowed) {
+    throw new RemoteSecurityError(
+      `Origin not in allowlist. Received: ${urlOrigin}.`,
+      url
+    );
+  }
+}
+
 export function clearRemoteCache(url?: string, scope?: string) {
   if (url && scope) {
     const cacheKey = `${scope}@${url}`;
+
     loadedContainers.delete(cacheKey);
     loadingScripts.delete(cacheKey);
 
     const scriptAlreadyAddedToDOM = document.querySelector(
       `script[data-scope="${scope}"][data-url="${url}"]`
     );
+
     if (scriptAlreadyAddedToDOM) {
       scriptAlreadyAddedToDOM.remove();
     }
+
     return;
   }
 
   loadedContainers.clear();
   loadingScripts.clear();
+
   document
     .querySelectorAll("script[data-scope][data-url]")
     .forEach((script) => {
@@ -708,6 +767,8 @@ async function loadRemoteContainer(
   url: string,
   scope: string
 ): Promise<RemoteContainer> {
+  validateRemoteUrl(url);
+
   const cacheKey = `${scope}@${url}`;
 
   if (loadedContainers.has(cacheKey)) {
@@ -715,6 +776,7 @@ async function loadRemoteContainer(
   }
 
   await loadRemoteScript(url, scope);
+
   const container = await waitForRemoteContainerToAppearOnWindow(scope);
 
   if (!container) {
@@ -751,8 +813,7 @@ function waitForRemoteContainerToAppearOnWindow(
         return;
       }
 
-      // Polling is necessary because no event tells us when the container is ready
-      setTimeout(checkIfContainerExistsOnWindow, 50);
+      setTimeout(checkIfContainerExistsOnWindow, 100);
     };
 
     checkIfContainerExistsOnWindow();
@@ -814,7 +875,11 @@ export async function loadRemoteModule<T = React.ComponentType>(
     const module = createModuleFactory();
     return module as T;
   } catch (error) {
-    console.error("[loadRemoteModule] Failed to load:", options, error);
+    if (error instanceof RemoteSecurityError) {
+      console.error("[loadRemoteModule] Security violation:", error.message);
+    } else {
+      console.error("[loadRemoteModule] Failed to load:", options, error);
+    }
     throw error;
   }
 }
